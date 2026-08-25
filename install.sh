@@ -1,7 +1,3 @@
-
-## 2. install.sh (Script de Instalação)
-
-```bash
 #!/bin/bash
 # install.sh - Script de instalação do Dashboard RADIUS
 # Uso: curl -sSL https://raw.githubusercontent.com/tiagojulianoferreira/radius_dashboard/main/install.sh | sudo bash
@@ -98,7 +94,7 @@ echo -e "${YELLOW}[3/7] Verificando logs do FreeRADIUS...${NC}"
 LOG_PATH="/var/log/freeradius/radius.log"
 if [ ! -f "$LOG_PATH" ]; then
     echo -e "${YELLOW}⚠️  Log não encontrado em: $LOG_PATH${NC}"
-    
+
     # Procura em locais alternativos
     ALT_LOGS=(
         "/var/log/radius/radius.log"
@@ -106,7 +102,7 @@ if [ ! -f "$LOG_PATH" ]; then
         "/var/log/radius.log"
         "/var/log/freeradius/freeradius.log"
     )
-    
+
     for alt in "${ALT_LOGS[@]}"; do
         if [ -f "$alt" ]; then
             LOG_PATH="$alt"
@@ -114,7 +110,7 @@ if [ ! -f "$LOG_PATH" ]; then
             break
         fi
     done
-    
+
     if [ ! -f "$LOG_PATH" ]; then
         echo -e "${YELLOW}⚠️  Nenhum log do FreeRADIUS encontrado${NC}"
         echo -e "${YELLOW}   O dashboard será gerado sem dados históricos${NC}"
@@ -157,7 +153,7 @@ download_file() {
     local url="$1"
     local output="$2"
     local desc="$3"
-    
+
     echo -n "   📥 Baixando $desc... "
     if wget -q -O "$output" "$url" 2>/dev/null; then
         if [ -s "$output" ]; then
@@ -230,11 +226,11 @@ server {
         alias /var/www/html/radius/;
         index index.html;
         try_files $uri $uri/ =404;
-        
+
         location ~* \.html$ {
             add_header Cache-Control "no-cache, no-store, must-revalidate";
         }
-        
+
         location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|avif)$ {
             expires 1y;
             add_header Cache-Control "public, immutable";

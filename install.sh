@@ -1,7 +1,7 @@
 #!/bin/bash
-# install-radius-dashboard.sh
+# install.sh
 # Script de instalação automática do Dashboard RADIUS
-# Inclui instalação de todas as dependências
+# Baixa o gerar_painel.py do repositório
 
 set -e
 
@@ -17,6 +17,14 @@ echo -e "${BLUE}║     RADIUS Dashboard - Script de Instalação Automática   
 echo -e "${BLUE}║           FreeRADIUS Monitoring & Analytics               ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
+
+# ============================================================
+# CONFIGURAÇÕES DO REPOSITÓRIO
+# ============================================================
+REPO_OWNER="tiagojulianoferreira"
+REPO_NAME="radius_dashboard"
+REPO_BRANCH="main"
+REPO_RAW="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}"
 
 # ============================================================
 # 1. VERIFICAÇÃO DE PRÉ-REQUISITOS
@@ -40,6 +48,14 @@ fi
 
 echo -e "   📦 Sistema: ${GREEN}$OS $VER${NC}"
 
+# Verifica conexão com a internet
+echo "   🌐 Verificando conexão com a internet..."
+if ! ping -c 1 -W 2 github.com >/dev/null 2>&1; then
+    echo -e "${RED}❌ Sem conexão com a internet. Não é possível baixar os arquivos.${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Conexão ok${NC}"
+
 # Atualiza os pacotes
 echo "   📦 Atualizando pacotes..."
 apt update -qq
@@ -57,14 +73,9 @@ apt install -y -qq \
     sudo \
     systemd \
     gzip \
-    coreutils
-
-# Verifica se o FreeRADIUS está instalado
-if ! command -v freeradius &> /dev/null && ! command -v radiusd &> /dev/null; then
-    echo -e "${YELLOW}⚠️  FreeRADIUS não encontrado.${NC}"
-    echo -e "${YELLOW}   O dashboard funciona sem o FreeRADIUS, mas os logs não serão gerados.${NC}"
-    echo -e "${YELLOW}   Para instalar: apt install freeradius freeradius-common -y${NC}"
-fi
+    coreutils \
+    git \
+    ca-certificates
 
 # Verifica Python
 python3 --version | head -1
@@ -81,11 +92,11 @@ if [ ! -f "$LOG_PATH" ]; then
     echo -e "${YELLOW}⚠️  Log do FreeRADIUS não encontrado em: $LOG_PATH${NC}"
     echo -e "${YELLOW}   Verificando caminhos alternativos...${NC}"
     
-    # Procura em outros locais comuns
     ALTERNATIVE_LOGS=(
         "/var/log/radius/radius.log"
         "/var/log/freeradius/radius/radius.log"
         "/var/log/radius.log"
+        "/var/log/freeradius/freeradius.log"
     )
     
     FOUND_LOG=""
@@ -102,7 +113,7 @@ if [ ! -f "$LOG_PATH" ]; then
     else
         echo -e "${YELLOW}⚠️  Nenhum log do FreeRADIUS encontrado.${NC}"
         echo -e "${YELLOW}   O dashboard será gerado, mas sem dados.${NC}"
-        echo -e "${YELLOW}   Certifique-se de que o FreeRADIUS está configurado corretamente.${NC}"
+        echo -e "${YELLOW}   Certifique-se de que o FreeRADIUS está configurado.${NC}"
         echo ""
         read -p "Deseja continuar mesmo assim? (s/N): " -n 1 -r
         echo
@@ -142,71 +153,36 @@ cd /opt/radius_dashboard
 echo "   🐍 Criando ambiente virtual Python..."
 python3 -m venv venv
 
+# ============================================================
+# 5. BAIXA OS ARQUIVOS DO REPOSITÓRIO
+# ============================================================
+echo ""
+echo -e "${YELLOW}[5/7] Baixando arquivos do repositório...${NC}"
+
+# Baixa o script Python
+echo "   📥 Baixando gerar_painel.py..."
+if wget -q -O /opt/radius_dashboard/gerar_painel.py "${REPO_RAW}/gerar_painel.py"; then
+    echo -e "${GREEN}✅ gerar_painel.py baixado${NC}"
+else
+    echo -e "${RED}❌ Falha ao baixar gerar_painel.py${NC}"
+    echo -e "${YELLOW}   Verifique se o arquivo existe no repositório:${NC}"
+    echo -e "${YELLOW}   ${REPO_RAW}/gerar_painel.py${NC}"
+    exit 1
+fi
+
+chmod +x /opt/radius_dashboard/gerar_painel.py
+
 # Baixa o Chart.js
-echo "   📊 Baixando Chart.js..."
+echo "   📥 Baixando Chart.js..."
 if wget -q -O /var/www/html/radius/chart.min.js https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js; then
     echo -e "${GREEN}✅ Chart.js baixado${NC}"
 else
-    echo -e "${YELLOW}⚠️  Falha ao baixar Chart.js. Usando fallback...${NC}"
+    echo -e "${YELLOW}⚠️  Falha ao baixar Chart.js. Tentando com curl...${NC}"
     curl -s -o /var/www/html/radius/chart.min.js https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js
 fi
 chown www-data:www-data /var/www/html/radius/chart.min.js 2>/dev/null || true
 
-# ============================================================
-# 5. CRIAÇÃO DO SCRIPT PYTHON
-# ============================================================
-echo ""
-echo -e "${YELLOW}[5/7] Criando script Python...${NC}"
-
-# Tenta baixar do GitHub
-if wget -q -O /opt/radius_dashboard/gerar_painel.py https://raw.githubusercontent.com/tiagojulianoferreira/radius_dashboard/refs/heads/main/gerar_painel.py; then
-    echo -e "${GREEN}✅ Script baixado do GitHub${NC}"
-else
-    echo -e "${YELLOW}⚠️  Falha ao baixar script. Criando localmente...${NC}"
-    # Cria um script mínimo (o conteúdo completo seria grande demais aqui)
-    cat > /opt/radius_dashboard/gerar_painel.py << 'PYTHON_SCRIPT'
-#!/opt/radius_dashboard/venv/bin/python3
-"""
-Dashboard RADIUS - IFSC
-"""
-import re
-import os
-import json
-import pwd
-import grp
-import gzip
-import glob
-from datetime import datetime
-from collections import defaultdict, Counter
-import calendar
-
-LOG_PATH = "/var/log/freeradius/radius.log*"
-OUTPUT_DASHBOARD = "/var/www/html/radius/index.html"
-OUTPUT_INDEX = "/var/www/html/index.html"
-CHART_JS_PATH = "/var/www/html/radius/chart.min.js"
-
-def main():
-    print("📊 Dashboard RADIUS - Gerado com sucesso!")
-    print("⚠️  Script completo não encontrado. Use a versão do GitHub.")
-    # Cria um HTML básico
-    html = """<!DOCTYPE html>
-<html><head><title>Dashboard RADIUS</title></head>
-<body><h1>📊 Dashboard RADIUS</h1>
-<p>Script em execução. Aguarde a instalação completa.</p>
-</body></html>"""
-    os.makedirs("/var/www/html/radius", exist_ok=True)
-    with open(OUTPUT_DASHBOARD, 'w') as f:
-        f.write(html)
-    with open(OUTPUT_INDEX, 'w') as f:
-        f.write(html)
-
-if __name__ == "__main__":
-    main()
-PYTHON_SCRIPT
-fi
-
-chmod +x /opt/radius_dashboard/gerar_painel.py
-echo -e "${GREEN}✅ Script Python criado${NC}"
+echo -e "${GREEN}✅ Arquivos baixados${NC}"
 
 # ============================================================
 # 6. CONFIGURAÇÃO DO NGINX
@@ -274,15 +250,6 @@ if nginx -t 2>/dev/null; then
 else
     echo -e "${RED}❌ Erro na configuração do Nginx${NC}"
     echo -e "${YELLOW}   Verifique: nginx -t${NC}"
-    cat /etc/nginx/sites-available/radius
-fi
-
-# Verifica se o Nginx está rodando
-if systemctl is-active --quiet nginx; then
-    echo -e "${GREEN}✅ Nginx rodando${NC}"
-else
-    echo -e "${RED}❌ Nginx não está rodando${NC}"
-    systemctl status nginx
 fi
 
 # ============================================================
@@ -290,6 +257,9 @@ fi
 # ============================================================
 echo ""
 echo -e "${YELLOW}[7/7] Configurando serviços systemd...${NC}"
+
+# Atualiza o script com o caminho correto do log
+sed -i "s|LOG_PATH = \"/var/log/freeradius/radius.log*\"|LOG_PATH = \"${LOG_PATH}*\"|g" /opt/radius_dashboard/gerar_painel.py
 
 # Serviço
 cat > /etc/systemd/system/radius-dashboard.service << 'SERVICE'
@@ -304,6 +274,7 @@ User=www-data
 Group=www-data
 StandardOutput=append:/var/log/radius_dashboard.log
 StandardError=append:/var/log/radius_dashboard.log
+Environment="PYTHONUNBUFFERED=1"
 
 [Install]
 WantedBy=multi-user.target
@@ -348,6 +319,7 @@ if /opt/radius_dashboard/venv/bin/python3 /opt/radius_dashboard/gerar_painel.py 
 else
     echo -e "${RED}❌ Falha ao gerar o dashboard.${NC}"
     echo -e "${YELLOW}   Verifique o log: cat /var/log/radius_dashboard.log${NC}"
+    echo -e "${YELLOW}   Execute manualmente: /opt/radius_dashboard/venv/bin/python3 /opt/radius_dashboard/gerar_painel.py${NC}"
 fi
 
 # Verifica o arquivo HTML
@@ -380,6 +352,7 @@ echo ""
 echo "🛠️  Comandos úteis:"
 echo "   - Forçar atualização: systemctl start radius-dashboard.service"
 echo "   - Ver logs: journalctl -u radius-dashboard.service -n 50 -f"
+echo "   - Ver logs do dashboard: cat /var/log/radius_dashboard.log"
 echo "   - Ver timer: systemctl status radius-dashboard.timer"
 echo "   - Ver Nginx: systemctl status nginx"
 echo ""

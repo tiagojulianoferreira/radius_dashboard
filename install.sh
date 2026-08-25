@@ -23,7 +23,7 @@ echo ""
 # ============================================================
 REPO_OWNER="tiagojulianoferreira"
 REPO_NAME="radius_dashboard"
-REPO_BRANCH="main"
+REPO_BRANCH="main
 REPO_RAW="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}"
 
 # ============================================================

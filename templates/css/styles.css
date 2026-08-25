@@ -1,0 +1,40 @@
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#333;padding:20px}
+.container{max-width:1400px;margin:0 auto}
+.header{background:white;padding:20px 30px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:25px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.header h1{font-size:24px;font-weight:600;color:#1a237e}
+.header h1 span{color:#c62828}
+.header .timestamp{color:#666;font-size:14px}
+.header .period{color:#666;font-size:13px;background:#e8eaf6;padding:5px 15px;border-radius:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:25px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:25px}
+.grid-full{display:grid;grid-template-columns:1fr;gap:20px;margin-bottom:25px}
+.card{background:white;border-radius:10px;padding:25px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
+.card h3{font-size:14px;font-weight:500;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.card .value{font-size:48px;font-weight:700}
+.card .label{font-size:14px;color:#666;margin-top:5px}
+.card-success .value{color:#2e7d32}
+.card-danger .value{color:#c62828}
+.card-warning .value{color:#e65100}
+.card-info .value{color:#0d47a1}
+.card-chart{padding:20px}
+.card-chart h3{margin-bottom:15px}
+.chart-container{position:relative;height:280px}
+.chart-container-tall{position:relative;height:350px}
+.today-stats{background:linear-gradient(135deg,#1a237e 0%,#0d47a1 100%);color:white;padding:15px 25px;border-radius:10px;margin-bottom:25px;display:flex;justify-content:space-around;align-items:center;flex-wrap:wrap;gap:15px}
+.today-stats .stat-item{text-align:center}
+.today-stats .stat-item .number{font-size:32px;font-weight:700}
+.today-stats .stat-item .label{font-size:12px;opacity:.8;text-transform:uppercase;letter-spacing:.5px}
+.today-stats .stat-item .number.success{color:#4caf50}
+.today-stats .stat-item .number.danger{color:#f44336}
+.today-stats .stat-item .number.warning{color:#ff9800}
+.rate-card{background:white;border-radius:10px;padding:20px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:25px}
+.rate-card .rate-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;text-align:center}
+.rate-card .rate-item{padding:15px;border-radius:8px}
+.rate-card .rate-item .number{font-size:32px;font-weight:700}
+.rate-card .rate-item .label{font-size:12px;color:#666;margin-top:5px}
+.rate-item.global{background:#e3f2fd}
+.rate-item.adjusted{background:#e8f5e9}
+.rate-item.impact{background:#fff3e0}
+.footer{text-align:center;margin-top:25px;color:#666;font-size:13px}
+@media(max-width:768px){.grid,.grid-2{grid-template-columns:1fr}.header,.today-stats{flex-direction:column;text-align:center}.rate-card .rate-grid{grid-template-columns:1fr}}

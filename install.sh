@@ -48,13 +48,17 @@ fi
 
 echo -e "   📦 Sistema: ${GREEN}$OS $VER${NC}"
 
-# Verifica conexão com a internet
-echo "   🌐 Verificando conexão com a internet..."
-if ! ping -c 1 -W 2 github.com >/dev/null 2>&1; then
-    echo -e "${RED}❌ Sem conexão com a internet. Não é possível baixar os arquivos.${NC}"
+# Verifica conexão com a internet via HTTPS
+echo "   🌐 Verificando conexão com a internet via HTTPS..."
+if ! curl -s --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}" https://raw.githubusercontent.com | grep -q "200\|301\|302"; then
+    echo -e "${RED}❌ Sem conexão HTTPS com GitHub. Não é possível baixar os arquivos.${NC}"
+    echo -e "${YELLOW}   Verifique:${NC}"
+    echo -e "${YELLOW}   - Firewall liberado para porta 443${NC}"
+    echo -e "${YELLOW}   - Proxy configurado (se necessário)${NC}"
+    echo -e "${YELLOW}   - DNS resolvendo corretamente${NC}"
     exit 1
 fi
-echo -e "${GREEN}✅ Conexão ok${NC}"
+echo -e "${GREEN}✅ Conexão HTTPS ok${NC}"
 
 # Atualiza os pacotes
 echo "   📦 Atualizando pacotes..."

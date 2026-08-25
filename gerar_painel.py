@@ -1,15 +1,9 @@
 #!/opt/radius_dashboard/venv/bin/python3
 """
 Dashboard RADIUS - IFSC
-Versão simplificada - usa templates separados
+Análise de autenticações FreeRADIUS
 """
-import re
-import os
-import json
-import pwd
-import grp
-import gzip
-import glob
+import re, os, json, pwd, grp, gzip, glob
 from datetime import datetime
 from collections import defaultdict, Counter
 import calendar
@@ -52,17 +46,15 @@ VENDORS_DB = {
 }
 
 # ============================================================
-# FUNÇÕES PRINCIPAIS
+# FUNÇÕES
 # ============================================================
 
 def get_vendor(mac):
-    if not mac:
-        return "Desconhecido"
+    if not mac: return "Desconhecido"
     clean_mac = re.sub(r'[^a-fA-F0-9]', '', mac)[:6].upper()
     return VENDORS_DB.get(clean_mac, "Outro Fabricante")
 
 def parse_logs(log_pattern, today_only=False):
-    """Analisa logs e retorna estatísticas"""
     stats = {
         'success': 0, 'fail': 0,
         'vendors_fail': {}, 'vendors_success': {},
@@ -70,10 +62,8 @@ def parse_logs(log_pattern, today_only=False):
         'hourly': defaultdict(int),
         'daily': defaultdict(int),
         'historical': defaultdict(int),
-        'users_fail': Counter(),
-        'users_success': Counter(),
-        'mac_fail': Counter(),
-        'mac_success': Counter(),
+        'users_fail': Counter(), 'users_success': Counter(),
+        'mac_fail': Counter(), 'mac_success': Counter(),
         'first_log': None, 'last_log': None
     }
     
@@ -82,8 +72,7 @@ def parse_logs(log_pattern, today_only=False):
     date_re = re.compile(r"^(\w{3}\s+\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})")
     
     log_files = sorted(glob.glob(log_pattern), reverse=True)
-    if not log_files:
-        return stats
+    if not log_files: return stats
     
     today = datetime.now().date()
     error_type = "Senha incorreta"
@@ -146,7 +135,6 @@ def parse_logs(log_pattern, today_only=False):
     
     stats['historical'] = sorted(stats['historical'].items())
     
-    # Métricas agregadas
     all_users = set(stats['users_fail'].keys()) | set(stats['users_success'].keys())
     stats['users_error_rate'] = {}
     for user in all_users:
@@ -193,25 +181,17 @@ def load_chartjs():
     return "// Chart.js não encontrado"
 
 def generate_html(stats, stats_today):
-    """Gera HTML usando templates separados"""
-    
-    # Carrega templates
     html_template = load_template('index.html') or "<html><body>Template não encontrado</body></html>"
     css_template = load_template('css/style.css') or "/* CSS não encontrado */"
     js_template = load_template('js/dashboard.js') or "// JS não encontrado"
     chart_js = load_chartjs()
     
-    # Dados para substituição
     total = stats['success'] + stats['fail']
     total_today = stats_today['success'] + stats_today['fail']
-    
-    # Taxas
     global_rate = (stats['fail'] / total * 100) if total > 0 else 0
     today_rate = (stats_today['fail'] / total_today * 100) if total_today > 0 else 0
     
-    # Taxa ajustada
-    adjusted_fail = stats['fail']
-    adjusted_success = stats['success']
+    adjusted_fail = stats['fail']; adjusted_success = stats['success']
     sorted_users = sorted(stats['users_fail'].items(), key=lambda x: x[1], reverse=True)
     remove_count = max(1, int(len(sorted_users) * 0.05))
     for user, count in sorted_users[:remove_count]:
@@ -220,27 +200,19 @@ def generate_html(stats, stats_today):
     adjusted_total = adjusted_fail + adjusted_success
     adjusted_rate = (adjusted_fail / adjusted_total * 100) if adjusted_total > 0 else 0
     
-    # Período
     period = "Dados disponíveis"
     if stats['first_log'] and stats['last_log']:
         days = (stats['last_log'] - stats['first_log']).days
         period = f"📅 {stats['first_log'].strftime('%d/%m/%Y %H:%M')} até {stats['last_log'].strftime('%d/%m/%Y %H:%M')} ({days} dias)"
     
     data = {
-        'PERIOD_TEXT': period,
-        'TIMESTAMP': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
-        'TODAY_SUCCESS': f"{stats_today['success']:,}",
-        'TODAY_FAIL': f"{stats_today['fail']:,}",
-        'TODAY_RATE': f"{today_rate:.1f}",
-        'TODAY_TOTAL': f"{total_today:,}",
-        'TOTAL_SUCCESS': f"{stats['success']:,}",
-        'TOTAL_FAIL': f"{stats['fail']:,}",
-        'TOTAL_ATTEMPTS': f"{total:,}",
-        'GLOBAL_RATE': f"{global_rate:.1f}",
-        'ADJUSTED_RATE': f"{adjusted_rate:.1f}",
-        'RATE_IMPACT': f"{global_rate - adjusted_rate:.1f}",
-        'TOTAL_USERS': f"{stats['total_users']}",
-        'TOTAL_MACS': f"{stats['total_macs']}",
+        'PERIOD_TEXT': period, 'TIMESTAMP': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+        'TODAY_SUCCESS': f"{stats_today['success']:,}", 'TODAY_FAIL': f"{stats_today['fail']:,}",
+        'TODAY_RATE': f"{today_rate:.1f}", 'TODAY_TOTAL': f"{total_today:,}",
+        'TOTAL_SUCCESS': f"{stats['success']:,}", 'TOTAL_FAIL': f"{stats['fail']:,}",
+        'TOTAL_ATTEMPTS': f"{total:,}", 'GLOBAL_RATE': f"{global_rate:.1f}",
+        'ADJUSTED_RATE': f"{adjusted_rate:.1f}", 'RATE_IMPACT': f"{global_rate - adjusted_rate:.1f}",
+        'TOTAL_USERS': f"{stats['total_users']}", 'TOTAL_MACS': f"{stats['total_macs']}",
         'VENDORS_LABELS': json.dumps(list(stats['vendors_fail'].keys())),
         'VENDORS_DATA': json.dumps(list(stats['vendors_fail'].values())),
         'ERRORS_LABELS': json.dumps(list(stats['errors'].keys())),
@@ -258,16 +230,12 @@ def generate_html(stats, stats_today):
         'PROBLEMATIC_MACS_DATA': json.dumps([m['rate'] for m in stats['top_problematic_macs']]),
         'PROBLEMATIC_MACS_DETAILS': json.dumps(stats['top_problematic_macs']),
         'COLORS': json.dumps(['#dc3545', '#ffc107', '#0d6efd', '#6c757d', '#20c997', '#fd7e14', '#6f42c1', '#e83e8c']),
-        'CHART_JS': chart_js,
-        'CSS_STYLES': css_template,
-        'JS_SCRIPTS': js_template
+        'CHART_JS': chart_js, 'CSS_STYLES': css_template, 'JS_SCRIPTS': js_template
     }
     
-    # Substitui placeholders
     html = html_template
     for key, value in data.items():
         html = html.replace(f'{{{{ {key} }}}}', value)
-    
     return html
 
 def generate_redirect_html():
@@ -285,7 +253,6 @@ def main():
     print("📊 Gerando Dashboard RADIUS...")
     stats = parse_logs(LOG_PATH, today_only=False)
     stats_today = parse_logs(LOG_PATH, today_only=True)
-    
     print(f"✅ Histórico: {stats['success']:,} | ❌ {stats['fail']:,}")
     print(f"✅ Hoje: {stats_today['success']:,} | ❌ {stats_today['fail']:,}")
     print(f"👤 Usuários: {stats['total_users']} | 📱 Equipamentos: {stats['total_macs']}")
@@ -307,7 +274,6 @@ def main():
         os.chown(OUTPUT_INDEX, uid, gid)
         os.chmod(OUTPUT_INDEX, 0o644)
     except: pass
-    
     print("✅ Dashboard gerado com sucesso!")
 
 if __name__ == "__main__":

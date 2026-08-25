@@ -23,7 +23,7 @@ echo ""
 # ============================================================
 REPO_OWNER="tiagojulianoferreira"
 REPO_NAME="radius_dashboard"
-REPO_BRANCH="main
+REPO_BRANCH="main"
 REPO_RAW="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}"
 
 # ============================================================
@@ -48,21 +48,113 @@ fi
 
 echo -e "   📦 Sistema: ${GREEN}$OS $VER${NC}"
 
+# ============================================================
+# FUNÇÃO PARA TESTAR CONEXÃO HTTPS
+# ============================================================
+test_https_connection() {
+    local url="$1"
+    local timeout="${2:-5}"
+    local max_time="${3:-10}"
+    
+    # Tenta com curl
+    if command -v curl &> /dev/null; then
+        if curl -s --connect-timeout "$timeout" --max-time "$max_time" -o /dev/null -w "%{http_code}" "$url" 2>/dev/null | grep -q "200\|301\|302\|307\|403\|404"; then
+            return 0
+        fi
+    fi
+    
+    # Tenta com wget como fallback
+    if command -v wget &> /dev/null; then
+        if wget -q --spider --timeout="$timeout" "$url" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
 # Verifica conexão com a internet via HTTPS
 echo "   🌐 Verificando conexão com a internet via HTTPS..."
-if ! curl -s --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}" https://raw.githubusercontent.com | grep -q "200\|301\|302"; then
+
+# Lista de endpoints para testar
+ENDPOINTS=(
+    "https://raw.githubusercontent.com"
+    "https://github.com"
+    "https://cdn.jsdelivr.net"
+)
+
+CONNECTED=false
+for endpoint in "${ENDPOINTS[@]}"; do
+    echo -n "      Testando: $endpoint... "
+    if test_https_connection "$endpoint" 5 10; then
+        echo -e "${GREEN}OK${NC}"
+        CONNECTED=true
+        break
+    else
+        echo -e "${RED}FALHOU${NC}"
+    fi
+done
+
+if [ "$CONNECTED" = false ]; then
     echo -e "${RED}❌ Sem conexão HTTPS com GitHub. Não é possível baixar os arquivos.${NC}"
+    echo ""
     echo -e "${YELLOW}   Verifique:${NC}"
     echo -e "${YELLOW}   - Firewall liberado para porta 443${NC}"
     echo -e "${YELLOW}   - Proxy configurado (se necessário)${NC}"
     echo -e "${YELLOW}   - DNS resolvendo corretamente${NC}"
+    echo -e "${YELLOW}   - Execute: curl -v https://raw.githubusercontent.com${NC}"
+    echo ""
     exit 1
 fi
 echo -e "${GREEN}✅ Conexão HTTPS ok${NC}"
 
+# ============================================================
+# FUNÇÃO PARA BAIXAR ARQUIVOS COM FALLBACK
+# ============================================================
+download_file() {
+    local url="$1"
+    local output="$2"
+    local description="${3:-Arquivo}"
+    
+    echo -n "   📥 Baixando $description... "
+    
+    # Tenta com curl
+    if command -v curl &> /dev/null; then
+        if curl -s -L --connect-timeout 10 --max-time 30 -o "$output" "$url" 2>/dev/null; then
+            echo -e "${GREEN}OK${NC}"
+            return 0
+        fi
+    fi
+    
+    # Tenta com wget como fallback
+    if command -v wget &> /dev/null; then
+        if wget -q -O "$output" "$url" 2>/dev/null; then
+            echo -e "${GREEN}OK${NC}"
+            return 0
+        fi
+    fi
+    
+    echo -e "${RED}FALHOU${NC}"
+    return 1
+}
+
+# ============================================================
+# 2. INSTALAÇÃO DE DEPENDÊNCIAS
+# ============================================================
+echo ""
+echo -e "${YELLOW}[2/7] Instalando dependências...${NC}"
+
+# Verifica se apt está disponível
+if ! command -v apt &> /dev/null; then
+    echo -e "${RED}❌ Sistema não suportado (apt não encontrado)${NC}"
+    exit 1
+fi
+
 # Atualiza os pacotes
 echo "   📦 Atualizando pacotes..."
-apt update -qq
+apt update -qq 2>/dev/null || {
+    echo -e "${YELLOW}⚠️  Falha ao atualizar pacotes. Continuando...${NC}"
+}
 
 # Instala dependências
 echo "   📦 Instalando dependências..."
@@ -79,17 +171,27 @@ apt install -y -qq \
     gzip \
     coreutils \
     git \
-    ca-certificates
+    ca-certificates 2>/dev/null || {
+    echo -e "${YELLOW}⚠️  Algumas dependências podem não ter sido instaladas.${NC}"
+}
+
+# Verifica se os comandos essenciais estão disponíveis
+for cmd in nginx python3 curl wget; do
+    if ! command -v $cmd &> /dev/null; then
+        echo -e "${RED}❌ Comando '$cmd' não encontrado.${NC}"
+        exit 1
+    fi
+done
 
 # Verifica Python
 python3 --version | head -1
 echo -e "${GREEN}✅ Dependências instaladas${NC}"
 
 # ============================================================
-# 2. VERIFICAÇÃO DOS LOGS
+# 3. VERIFICAÇÃO DOS LOGS
 # ============================================================
 echo ""
-echo -e "${YELLOW}[2/7] Verificando logs do FreeRADIUS...${NC}"
+echo -e "${YELLOW}[3/7] Verificando logs do FreeRADIUS...${NC}"
 
 LOG_PATH="/var/log/freeradius/radius.log"
 if [ ! -f "$LOG_PATH" ]; then
@@ -107,12 +209,12 @@ if [ ! -f "$LOG_PATH" ]; then
     for alt in "${ALTERNATIVE_LOGS[@]}"; do
         if [ -f "$alt" ]; then
             FOUND_LOG="$alt"
+            echo -e "${GREEN}✅ Log encontrado em: $FOUND_LOG${NC}"
             break
         fi
     done
     
     if [ -n "$FOUND_LOG" ]; then
-        echo -e "${GREEN}✅ Log encontrado em: $FOUND_LOG${NC}"
         LOG_PATH="$FOUND_LOG"
     else
         echo -e "${YELLOW}⚠️  Nenhum log do FreeRADIUS encontrado.${NC}"
@@ -132,19 +234,19 @@ else
 fi
 
 # ============================================================
-# 3. CONFIGURAÇÃO DO DOMÍNIO
+# 4. CONFIGURAÇÃO DO DOMÍNIO
 # ============================================================
 echo ""
-echo -e "${YELLOW}[3/7] Configuração do domínio...${NC}"
+echo -e "${YELLOW}[4/7] Configuração do domínio...${NC}"
 read -p "Digite o domínio para o dashboard (ex: radius.ifsc.edu.br) ou pressione Enter para usar localhost: " DOMAIN
 DOMAIN=${DOMAIN:-"localhost"}
 echo -e "${GREEN}✅ Domínio definido: $DOMAIN${NC}"
 
 # ============================================================
-# 4. INSTALAÇÃO DO DASHBOARD
+# 5. INSTALAÇÃO DO DASHBOARD
 # ============================================================
 echo ""
-echo -e "${YELLOW}[4/7] Instalando o Dashboard...${NC}"
+echo -e "${YELLOW}[5/7] Instalando o Dashboard...${NC}"
 
 # Cria diretórios
 mkdir -p /opt/radius_dashboard
@@ -155,18 +257,20 @@ cd /opt/radius_dashboard
 
 # Cria ambiente virtual
 echo "   🐍 Criando ambiente virtual Python..."
-python3 -m venv venv
+python3 -m venv venv 2>/dev/null || {
+    echo -e "${RED}❌ Falha ao criar ambiente virtual. Instale python3-venv.${NC}"
+    exit 1
+}
 
 # ============================================================
-# 5. BAIXA OS ARQUIVOS DO REPOSITÓRIO
+# 6. BAIXA OS ARQUIVOS DO REPOSITÓRIO
 # ============================================================
 echo ""
-echo -e "${YELLOW}[5/7] Baixando arquivos do repositório...${NC}"
+echo -e "${YELLOW}[6/7] Baixando arquivos do repositório...${NC}"
 
 # Baixa o script Python
-echo "   📥 Baixando gerar_painel.py..."
-if wget -q -O /opt/radius_dashboard/gerar_painel.py "${REPO_RAW}/gerar_painel.py"; then
-    echo -e "${GREEN}✅ gerar_painel.py baixado${NC}"
+if download_file "${REPO_RAW}/gerar_painel.py" "/opt/radius_dashboard/gerar_painel.py" "gerar_painel.py"; then
+    chmod +x /opt/radius_dashboard/gerar_painel.py
 else
     echo -e "${RED}❌ Falha ao baixar gerar_painel.py${NC}"
     echo -e "${YELLOW}   Verifique se o arquivo existe no repositório:${NC}"
@@ -174,25 +278,20 @@ else
     exit 1
 fi
 
-chmod +x /opt/radius_dashboard/gerar_painel.py
-
 # Baixa o Chart.js
-echo "   📥 Baixando Chart.js..."
-if wget -q -O /var/www/html/radius/chart.min.js https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js; then
-    echo -e "${GREEN}✅ Chart.js baixado${NC}"
+if download_file "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" "/var/www/html/radius/chart.min.js" "Chart.js"; then
+    chown www-data:www-data /var/www/html/radius/chart.min.js 2>/dev/null || true
 else
-    echo -e "${YELLOW}⚠️  Falha ao baixar Chart.js. Tentando com curl...${NC}"
-    curl -s -o /var/www/html/radius/chart.min.js https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js
+    echo -e "${YELLOW}⚠️  Falha ao baixar Chart.js. Continuando...${NC}"
 fi
-chown www-data:www-data /var/www/html/radius/chart.min.js 2>/dev/null || true
 
 echo -e "${GREEN}✅ Arquivos baixados${NC}"
 
 # ============================================================
-# 6. CONFIGURAÇÃO DO NGINX
+# 7. CONFIGURAÇÃO DO NGINX
 # ============================================================
 echo ""
-echo -e "${YELLOW}[6/7] Configurando Nginx...${NC}"
+echo -e "${YELLOW}[7/7] Configurando Nginx...${NC}"
 
 # Para o Nginx se estiver rodando
 systemctl stop nginx 2>/dev/null || true
@@ -245,25 +344,31 @@ NGINX_CONFIG
 ln -sf /etc/nginx/sites-available/radius /etc/nginx/sites-enabled/
 
 # Inicia o Nginx
-systemctl start nginx
+systemctl start nginx 2>/dev/null || {
+    echo -e "${YELLOW}⚠️  Falha ao iniciar Nginx. Tentando recarregar...${NC}"
+    systemctl restart nginx 2>/dev/null || true
+}
 
 # Testa a configuração
 if nginx -t 2>/dev/null; then
-    systemctl reload nginx
+    systemctl reload nginx 2>/dev/null || true
     echo -e "${GREEN}✅ Nginx configurado na porta 8080${NC}"
 else
     echo -e "${RED}❌ Erro na configuração do Nginx${NC}"
     echo -e "${YELLOW}   Verifique: nginx -t${NC}"
+    echo -e "${YELLOW}   Arquivo: /etc/nginx/sites-available/radius${NC}"
 fi
 
 # ============================================================
-# 7. CRIAÇÃO DOS SERVIÇOS SYSTEMD
+# 8. CRIAÇÃO DOS SERVIÇOS SYSTEMD
 # ============================================================
 echo ""
-echo -e "${YELLOW}[7/7] Configurando serviços systemd...${NC}"
+echo -e "${YELLOW}[8/8] Configurando serviços systemd...${NC}"
 
 # Atualiza o script com o caminho correto do log
-sed -i "s|LOG_PATH = \"/var/log/freeradius/radius.log*\"|LOG_PATH = \"${LOG_PATH}*\"|g" /opt/radius_dashboard/gerar_painel.py
+if [ -f "/opt/radius_dashboard/gerar_painel.py" ]; then
+    sed -i "s|LOG_PATH = \"/var/log/freeradius/radius.log*\"|LOG_PATH = \"${LOG_PATH}*\"|g" /opt/radius_dashboard/gerar_painel.py
+fi
 
 # Serviço
 cat > /etc/systemd/system/radius-dashboard.service << 'SERVICE'

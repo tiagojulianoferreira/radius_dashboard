@@ -1,4 +1,3 @@
-# Cria o script de instalação
 cat > /tmp/install-radius-dashboard.sh << 'EOF'
 #!/bin/bash
 # install-radius-dashboard.sh
@@ -11,7 +10,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║     RADIUS Dashboard - Script de Instalação Automática    ║${NC}"
@@ -24,13 +23,11 @@ echo ""
 # ============================================================
 echo -e "${YELLOW}[1/6] Verificando pré-requisitos...${NC}"
 
-# Verifica se está rodando como root
 if [ "$EUID" -ne 0 ]; then 
     echo -e "${RED}❌ Este script precisa ser executado como root${NC}"
     exit 1
 fi
 
-# Verifica Python 3
 if ! command -v python3 &> /dev/null; then
     echo -e "${RED}❌ Python 3 não encontrado.${NC}"
     echo -e "${YELLOW}   Instale com: apt install python3 python3-venv python3-pip -y${NC}"
@@ -38,20 +35,17 @@ if ! command -v python3 &> /dev/null; then
 fi
 echo -e "${GREEN}✅ Python 3: $(python3 --version)${NC}"
 
-# Verifica Nginx
 if ! command -v nginx &> /dev/null; then
     echo -e "${YELLOW}⚠️  Nginx não encontrado. Instalando...${NC}"
     apt update && apt install -y nginx
 fi
 echo -e "${GREEN}✅ Nginx: $(nginx -v 2>&1 | cut -d'/' -f2)${NC}"
 
-# Verifica wget
 if ! command -v wget &> /dev/null; then
     echo -e "${YELLOW}⚠️  wget não encontrado. Instalando...${NC}"
     apt install -y wget
 fi
 
-# Verifica os logs do FreeRADIUS
 LOG_PATH="/var/log/freeradius/radius.log"
 if [ ! -f "$LOG_PATH" ]; then
     echo -e "${YELLOW}⚠️  Log do FreeRADIUS não encontrado em: $LOG_PATH${NC}"
@@ -86,18 +80,14 @@ echo -e "${GREEN}✅ Domínio definido: $DOMAIN${NC}"
 echo ""
 echo -e "${YELLOW}[3/6] Instalando o Dashboard...${NC}"
 
-# Cria diretório do projeto
 mkdir -p /opt/radius_dashboard
 cd /opt/radius_dashboard
 
-# Cria ambiente virtual
 echo "   Criando ambiente virtual Python..."
 python3 -m venv venv
 
-# Cria diretório web
 mkdir -p /var/www/html/radius
 
-# Baixa o Chart.js
 echo "   Baixando Chart.js..."
 wget -q -O /var/www/html/radius/chart.min.js https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js
 chown www-data:www-data /var/www/html/radius/chart.min.js 2>/dev/null || true
@@ -109,7 +99,6 @@ echo -e "${GREEN}✅ Chart.js baixado${NC}"
 echo ""
 echo -e "${YELLOW}[4/6] Criando script Python...${NC}"
 
-# Função para criar o script Python (vamos colocar o conteúdo completo)
 cat > /opt/radius_dashboard/gerar_painel.py << 'PYTHON_SCRIPT'
 #!/opt/radius_dashboard/venv/bin/python3
 """
@@ -136,10 +125,9 @@ OUTPUT_INDEX = "/var/www/html/index.html"
 CHART_JS_PATH = "/var/www/html/radius/chart.min.js"
 
 # ============================================================
-# BANCO DE FABRICANTES (OUI) - Versão simplificada
+# BANCO DE FABRICANTES (OUI)
 # ============================================================
 VENDORS_DB = {
-    # Apple
     "001C42": "Apple", "001E52": "Apple", "1CD1A1": "Apple", 
     "40A108": "Apple", "7CD1C3": "Apple", "A47174": "Apple", 
     "CC08E0": "Apple", "F0D1A9": "Apple", "0003E9": "Apple",
@@ -166,7 +154,6 @@ VENDORS_DB = {
     "00F165": "Apple", "00F4F2": "Apple", "00F88C": "Apple",
     "00FC27": "Apple", "00FFD5": "Apple",
     
-    # Samsung
     "0016DB": "Samsung", "185A58": "Samsung", "508569": "Samsung", 
     "8455A5": "Samsung", "980D2E": "Samsung", "A0B100": "Samsung", 
     "C802A6": "Samsung", "F49F5A": "Samsung", "000FF8": "Samsung",
@@ -206,12 +193,10 @@ VENDORS_DB = {
     "EC3941": "Samsung", "F03D5E": "Samsung", "F44C76": "Samsung",
     "F89404": "Samsung", "FC125B": "Samsung",
     
-    # Motorola
     "001EA7": "Motorola", "0022AA": "Motorola", "1430C6": "Motorola", 
     "404E32": "Motorola", "84D32A": "Motorola", "A470D2": "Motorola", 
     "D850E6": "Motorola", "EC8A4C": "Motorola", "F8CF15": "Motorola",
     
-    # Xiaomi
     "185936": "Xiaomi", "50EC50": "Xiaomi", "6493F2": "Xiaomi", 
     "9C2EA1": "Xiaomi", "AC4A69": "Xiaomi", "CC4E24": "Xiaomi",
     "009D6B": "Xiaomi", "00B4D8": "Xiaomi", "0CF3EE": "Xiaomi",
@@ -236,7 +221,6 @@ VENDORS_DB = {
     "E86FDE": "Xiaomi", "EC589C": "Xiaomi", "F0A522": "Xiaomi",
     "F4A7B6": "Xiaomi", "F8ED38": "Xiaomi", "FC527A": "Xiaomi",
     
-    # Google
     "1C5A3B": "Google", "2405F5": "Google", "3C5AB2": "Google", 
     "F80F41": "Google", "00C0B7": "Google", "00E0B7": "Google",
     "0C47C9": "Google", "14D78D": "Google", "18B430": "Google",
@@ -257,7 +241,6 @@ VENDORS_DB = {
     "C8ECF8": "Google", "CCF0E5": "Google", "D0F4E6": "Google",
     "D4F8E4": "Google", "D8FCE2": "Google", "DCFFE0": "Google",
     
-    # Huawei
     "001EC0": "Huawei", "0050F2": "Huawei", "00C08E": "Huawei",
     "00E0F6": "Huawei", "0C96E6": "Huawei", "10D17D": "Huawei",
     "140B8C": "Huawei", "1830B4": "Huawei", "1C6B7C": "Huawei",
@@ -275,7 +258,6 @@ VENDORS_DB = {
     "A4C8CE": "Huawei", "A8CCCA": "Huawei", "ACD0C6": "Huawei",
     "B0D4C2": "Huawei", "B4D8BE": "Huawei", "B8DCBA": "Huawei",
     
-    # OPPO
     "00C866": "Oppo", "00E05A": "Oppo", "08006C": "Oppo",
     "0C1D81": "Oppo", "103A8C": "Oppo", "143E90": "Oppo",
     "184294": "Oppo", "1C4698": "Oppo", "204A9C": "Oppo",
@@ -293,7 +275,6 @@ VENDORS_DB = {
     "A8D2FF": "Oppo", "ACD6FF": "Oppo", "B0DAFF": "Oppo",
     "B4DEFF": "Oppo", "B8E2FF": "Oppo", "BCE6FF": "Oppo",
     
-    # MACS RANDOMIZADOS (iOS/Android)
     "025FA4": "Apple", "02BB42": "Android", "067600": "Apple", 
     "0ED5C4": "Android", "12CE6D": "Apple", "16A8EC": "Apple", 
     "1A0E92": "Apple", "1ED9C0": "Android", "26EE35": "Apple", 
@@ -315,7 +296,6 @@ VENDORS_DB = {
     "EE7A97": "Android", "F63F47": "Apple", "FA1A93": "Android", 
     "FA6AB0": "Android", "FEA80F": "Android",
     
-    # Outros
     "0013E8": "Intel", "4C796E": "Intel", "70CD60": "Intel", 
     "A0C589": "Intel", "0004F2": "HP", "001B11": "HP", 
     "00215E": "Dell", "001C25": "Dell", "000C29": "VMware", 
@@ -330,15 +310,12 @@ VENDORS_DB = {
 # ============================================================
 
 def get_vendor(mac):
-    """Retorna o fabricante baseado no MAC address"""
     if not mac:
         return "Desconhecido"
     clean_mac = re.sub(r'[^a-fA-F0-9]', '', mac)[:6].upper()
     return VENDORS_DB.get(clean_mac, "Outro Fabricante")
 
 def parse_log_file(filepath, stats, today_only=False):
-    """Analisa um único arquivo de log (pode ser .gz)"""
-    
     ok_re = re.compile(r".*:\s+\((\d+)\)\s+Login OK:.*cli\s+([0-9a-fA-F:-]+)")
     fail_re = re.compile(r".*:\s+\((\d+)\)\s+Login incorrect.*cli\s+([0-9a-fA-F:-]+)")
     date_re = re.compile(r"^(\w{3}\s+\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})")
@@ -424,8 +401,6 @@ def parse_log_file(filepath, stats, today_only=False):
                 error_type = "Senha incorreta"
 
 def parse_all_logs(log_pattern="/var/log/freeradius/radius.log*", today_only=False):
-    """Analisa todos os arquivos de log"""
-    
     stats = {
         'success': 0,
         'fail': 0,
@@ -440,7 +415,6 @@ def parse_all_logs(log_pattern="/var/log/freeradius/radius.log*", today_only=Fal
     }
     
     log_files = sorted(glob.glob(log_pattern), reverse=True)
-    
     if not log_files:
         print("   ⚠️  Nenhum arquivo de log encontrado!")
         return stats
@@ -455,15 +429,12 @@ def parse_all_logs(log_pattern="/var/log/freeradius/radius.log*", today_only=Fal
     return stats
 
 def load_chartjs():
-    """Carrega o Chart.js para injeção inline"""
     if os.path.exists(CHART_JS_PATH):
         with open(CHART_JS_PATH, 'r', encoding='utf-8', errors='ignore') as f:
             return f.read()
     return "// Chart.js não encontrado"
 
 def generate_html(stats, stats_today, chart_js_code):
-    """Gera o HTML do dashboard"""
-    
     total_today = stats_today['success'] + stats_today['fail']
     fail_percentage_today = (stats_today['fail'] / total_today * 100) if total_today > 0 else 0
     
@@ -595,7 +566,6 @@ def generate_html(stats, stats_today, chart_js_code):
             <div class="timestamp">Atualizado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</div>
         </div>
         
-        <!-- Dados do dia atual -->
         <div class="today-stats">
             <div class="stat-item">
                 <div class="number success">{stats_today['success']:,}</div>
@@ -615,7 +585,6 @@ def generate_html(stats, stats_today, chart_js_code):
             </div>
         </div>
         
-        <!-- Cards de estatísticas históricas -->
         <div class="grid">
             <div class="card card-success">
                 <h3>✅ Autenticações bem-sucedidas</h3>
@@ -634,7 +603,6 @@ def generate_html(stats, stats_today, chart_js_code):
             </div>
         </div>
         
-        <!-- Gráficos -->
         <div class="grid-2">
             <div class="card card-chart">
                 <h3>📱 Falhas por Fabricante</h3>
@@ -803,7 +771,9 @@ def generate_html(stats, stats_today, chart_js_code):
                     legend: {{ display: true }},
                     tooltip: {{ callbacks: {{ label: function(context) {{ return context.parsed.y + ' falhas'; }} }} }}
                 }},
-                scales: {{ y: {{ beginAtZero: true, ticks: {{ stepSize: 1 }} }} }}
+                scales: {{
+                    y: {{ beginAtZero: true, ticks: {{ stepSize: 1 }} }}
+                }}
             }}
         }});
         
@@ -834,7 +804,6 @@ def generate_html(stats, stats_today, chart_js_code):
 </html>"""
 
 def generate_redirect_html():
-    """Gera um index.html simples que redireciona para o dashboard"""
     return """<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -929,7 +898,6 @@ if __name__ == "__main__":
 PYTHON_SCRIPT
 
 chmod +x /opt/radius_dashboard/gerar_painel.py
-
 echo -e "${GREEN}✅ Script Python criado${NC}"
 
 # ============================================================
@@ -980,16 +948,13 @@ server {
 }
 EOF
 
-# Habilita o site
 ln -sf /etc/nginx/sites-available/radius /etc/nginx/sites-enabled/ 2>/dev/null || true
 
-# Testa e recarrega o Nginx
 if nginx -t 2>/dev/null; then
     systemctl reload nginx
     echo -e "${GREEN}✅ Nginx configurado na porta 8080${NC}"
 else
     echo -e "${RED}❌ Erro na configuração do Nginx${NC}"
-    echo -e "${YELLOW}   Verifique: nginx -t${NC}"
 fi
 
 # ============================================================
@@ -998,7 +963,6 @@ fi
 echo ""
 echo -e "${YELLOW}[6/6] Configurando serviços systemd...${NC}"
 
-# Serviço
 cat > /etc/systemd/system/radius-dashboard.service << EOF
 [Unit]
 Description=Servico de Geracao do Dashboard FreeRADIUS IFSC
@@ -1016,7 +980,6 @@ StandardError=append:/var/log/radius_dashboard.log
 WantedBy=multi-user.target
 EOF
 
-# Timer
 cat > /etc/systemd/system/radius-dashboard.timer << EOF
 [Unit]
 Description=Timer para gerar dashboard FreeRADIUS a cada 5 minutos
@@ -1031,7 +994,6 @@ RandomizedDelaySec=30s
 WantedBy=timers.target
 EOF
 
-# Recarrega e ativa
 systemctl daemon-reload
 systemctl enable radius-dashboard.timer 2>/dev/null || true
 systemctl start radius-dashboard.timer 2>/dev/null || true
@@ -1045,12 +1007,11 @@ echo -e "${BLUE}║                    INSTALAÇÃO CONCLUÍDA!                 
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Executa a primeira geração
 echo "📊 Gerando dashboard pela primeira vez..."
 if /opt/radius_dashboard/venv/bin/python3 /opt/radius_dashboard/gerar_painel.py 2>/dev/null; then
     echo -e "${GREEN}✅ Dashboard gerado com sucesso!${NC}"
 else
-    echo -e "${RED}❌ Falha ao gerar o dashboard. Verifique os logs.${NC}"
+    echo -e "${RED}❌ Falha ao gerar o dashboard.${NC}"
 fi
 
 echo ""
@@ -1062,7 +1023,6 @@ echo "📁 Arquivos importantes:"
 echo "   - Script: /opt/radius_dashboard/gerar_painel.py"
 echo "   - HTML: /var/www/html/radius/index.html"
 echo "   - Logs: /var/log/radius_dashboard.log"
-echo "   - Nginx: /etc/nginx/sites-available/radius"
 echo ""
 echo "🔄 Atualização automática:"
 echo "   - Timer: radius-dashboard.timer (a cada 5 minutos)"
@@ -1075,6 +1035,8 @@ echo "   - Ver timer: systemctl status radius-dashboard.timer"
 echo ""
 EOF
 
-# 2. Dá permissão de execução e executa
+# 2. Dá permissão de execução
 chmod +x /tmp/install-radius-dashboard.sh
-sudo /tmp/install-radius-dashboard.sh
+
+# 3. Agora, para executar com um único comando curl, você precisa hospedar
+# esse script em um servidor HTTP. Como alternativa, use:

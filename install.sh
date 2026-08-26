@@ -73,7 +73,8 @@ apt install -y -qq \
     systemd \
     gzip \
     coreutils \
-    ca-certificates
+    ca-certificates \
+    2>/dev/null || true
 
 # Verifica comandos essenciais
 for cmd in nginx python3 curl wget; do
@@ -134,52 +135,44 @@ fi
 echo ""
 echo -e "${YELLOW}[4/7] Criando diretórios...${NC}"
 
-mkdir -p /opt/radius_dashboard/templates/css
-mkdir -p /opt/radius_dashboard/templates/js
-mkdir -p /opt/radius_dashboard/config
+mkdir -p /opt/radius_dashboard
 mkdir -p /var/www/html/radius
 mkdir -p /var/log
 
 echo -e "${GREEN}✅ Diretórios criados${NC}"
 
 # ============================================================
-# 5. DOWNLOAD DOS ARQUIVOS
+# 5. DOWNLOAD DO SCRIPT PRINCIPAL
 # ============================================================
 echo ""
-echo -e "${YELLOW}[5/7] Baixando arquivos do repositório...${NC}"
+echo -e "${YELLOW}[5/7] Baixando script principal do repositório...${NC}"
 
-# Função para baixar arquivo
-download_file() {
-    local url="$1"
-    local output="$2"
-    local desc="$3"
-
-    echo -n "   📥 Baixando $desc... "
-    if wget -q -O "$output" "$url" 2>/dev/null; then
-        if [ -s "$output" ]; then
-            echo -e "${GREEN}OK${NC}"
-            return 0
-        fi
+# Baixa o gerar_painel.py da raiz do repositório
+echo -n "   📥 Baixando gerar_painel.py... "
+if wget -q -O /opt/radius_dashboard/gerar_painel.py "${REPO_RAW}/gerar_painel.py" 2>/dev/null; then
+    if [ -s /opt/radius_dashboard/gerar_painel.py ]; then
+        echo -e "${GREEN}OK${NC}"
+        chmod +x /opt/radius_dashboard/gerar_painel.py
+    else
+        echo -e "${RED}FALHOU - Arquivo vazio${NC}"
+        exit 1
     fi
+else
     echo -e "${RED}FALHOU${NC}"
-    return 1
-}
-
-# Lista de arquivos
-FILES=(
-    "gerar_painel.py:/opt/radius_dashboard/gerar_painel.py:Script Python"
-    "templates/index.html:/opt/radius_dashboard/templates/index.html:Template HTML"
-    "templates/css/style.css:/opt/radius_dashboard/templates/css/style.css:CSS"
-    "templates/js/dashboard.js:/opt/radius_dashboard/templates/js/dashboard.js:JavaScript"
-    "config/nginx-radius.conf:/opt/radius_dashboard/config/nginx-radius.conf:Config Nginx"
-)
-
-for file in "${FILES[@]}"; do
-    IFS=':' read -r src dest desc <<< "$file"
-    if ! download_file "${REPO_RAW}/${src}" "$dest" "$desc"; then
-        echo -e "   ${YELLOW}⚠️  Falha ao baixar $desc${NC}"
+    echo -e "${YELLOW}   Tentando via curl...${NC}"
+    if curl -s -o /opt/radius_dashboard/gerar_painel.py "${REPO_RAW}/gerar_painel.py"; then
+        if [ -s /opt/radius_dashboard/gerar_painel.py ]; then
+            echo -e "${GREEN}OK${NC}"
+            chmod +x /opt/radius_dashboard/gerar_painel.py
+        else
+            echo -e "${RED}FALHOU - Arquivo vazio${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${RED}FALHOU${NC}"
+        exit 1
     fi
-done
+fi
 
 # Baixa Chart.js
 echo -n "   📥 Baixando Chart.js... "
@@ -189,7 +182,15 @@ else
     echo -e "${YELLOW}FALHOU (será baixado na primeira execução)${NC}"
 fi
 
-chmod +x /opt/radius_dashboard/gerar_painel.py
+# Cria um arquivo de configuração com o caminho do log
+cat > /opt/radius_dashboard/config.json << 'CONFIG'
+{
+    "log_path": "/var/log/freeradius/radius.log",
+    "output_dir": "/var/www/html/radius",
+    "cache_file": "/opt/radius_dashboard/log_cache.pickle"
+}
+CONFIG
+
 echo -e "${GREEN}✅ Arquivos baixados${NC}"
 
 # ============================================================
@@ -205,11 +206,8 @@ systemctl stop nginx 2>/dev/null || true
 rm -f /etc/nginx/sites-enabled/default
 rm -f /etc/nginx/sites-available/default
 
-# Usa a configuração do repositório ou cria padrão
-if [ -f /opt/radius_dashboard/config/nginx-radius.conf ]; then
-    cp /opt/radius_dashboard/config/nginx-radius.conf /etc/nginx/sites-available/radius
-else
-    cat > /etc/nginx/sites-available/radius << 'NGINX'
+# Configuração do Nginx
+cat > /etc/nginx/sites-available/radius << 'NGINX'
 server {
     listen 8080 default_server;
     listen [::]:8080 default_server;
@@ -218,25 +216,32 @@ server {
     root /var/www/html;
     index index.html;
 
+    # Redireciona a raiz para o dashboard
     location = / {
         return 301 /radius/index.html;
     }
 
+    # Dashboard
     location /radius/ {
         alias /var/www/html/radius/;
         index index.html;
         try_files $uri $uri/ =404;
 
+        # Previne cache do HTML
         location ~* \.html$ {
             add_header Cache-Control "no-cache, no-store, must-revalidate";
+            add_header Pragma "no-cache";
+            add_header Expires "0";
         }
 
+        # Cache para assets estáticos
         location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|avif)$ {
             expires 1y;
             add_header Cache-Control "public, immutable";
         }
     }
 
+    # Protege arquivos sensíveis
     location ~ /\. {
         deny all;
     }
@@ -245,7 +250,6 @@ server {
     error_log /var/log/nginx/radius_error.log;
 }
 NGINX
-fi
 
 # Habilita o site
 ln -sf /etc/nginx/sites-available/radius /etc/nginx/sites-enabled/
@@ -259,6 +263,7 @@ if nginx -t 2>/dev/null; then
     echo -e "${GREEN}✅ Nginx configurado na porta 8080${NC}"
 else
     echo -e "${YELLOW}⚠️  Erro na configuração do Nginx${NC}"
+    echo -e "${YELLOW}   Verifique: nginx -t${NC}"
 fi
 
 # ============================================================
@@ -269,13 +274,25 @@ echo -e "${YELLOW}[7/7] Configurando serviços systemd...${NC}"
 
 # Cria ambiente virtual
 cd /opt/radius_dashboard
-python3 -m venv venv 2>/dev/null || true
+if [ ! -d "venv" ]; then
+    echo -n "   Criando ambiente virtual... "
+    python3 -m venv venv 2>/dev/null || true
+    echo -e "${GREEN}OK${NC}"
+fi
 
-# Serviço
+# Atualiza pip e instala dependências
+if [ -d "venv" ]; then
+    echo -n "   Instalando dependências Python... "
+    ./venv/bin/pip install --quiet --upgrade pip 2>/dev/null || true
+    echo -e "${GREEN}OK${NC}"
+fi
+
+# Serviço systemd
 cat > /etc/systemd/system/radius-dashboard.service << 'SERVICE'
 [Unit]
 Description=Dashboard RADIUS - FreeRADIUS Monitoring
 After=network.target nginx.service
+Wants=network.target
 
 [Service]
 Type=oneshot
@@ -290,7 +307,7 @@ Environment="PYTHONUNBUFFERED=1"
 WantedBy=multi-user.target
 SERVICE
 
-# Timer
+# Timer systemd (executa a cada 5 minutos)
 cat > /etc/systemd/system/radius-dashboard.timer << 'TIMER'
 [Unit]
 Description=Timer para atualizar Dashboard RADIUS a cada 5 minutos
@@ -324,8 +341,22 @@ if /opt/radius_dashboard/venv/bin/python3 /opt/radius_dashboard/gerar_painel.py 
 else
     echo -e "${YELLOW}⚠️  Falha na primeira geração. Verifique os logs.${NC}"
     echo -e "${YELLOW}   Executando com debug...${NC}"
-    /opt/radius_dashboard/venv/bin/python3 /opt/radius_dashboard/gerar_painel.py
+    /opt/radius_dashboard/venv/bin/python3 /opt/radius_dashboard/gerar_painel.py || true
 fi
+
+# ============================================================
+# AJUSTE DE PERMISSÕES
+# ============================================================
+echo ""
+echo -e "${YELLOW}🔒 Ajustando permissões...${NC}"
+
+chown -R www-data:www-data /var/www/html/radius 2>/dev/null || true
+chown -R www-data:www-data /opt/radius_dashboard 2>/dev/null || true
+chmod 755 /opt/radius_dashboard 2>/dev/null || true
+chmod 644 /var/www/html/radius/*.html 2>/dev/null || true
+chmod 644 /var/www/html/radius/*.json 2>/dev/null || true
+
+echo -e "${GREEN}✅ Permissões ajustadas${NC}"
 
 # ============================================================
 # RESUMO FINAL
@@ -345,7 +376,7 @@ else
 fi
 
 # Mostra informações de acesso
-IP=$(hostname -I | cut -d' ' -f1 2>/dev/null || echo "localhost")
+IP=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "localhost")
 echo ""
 echo "📊 Acesse o dashboard:"
 echo -e "   ${BLUE}http://$IP:8080/radius/index.html${NC}"
@@ -355,9 +386,9 @@ echo ""
 echo "📁 Arquivos importantes:"
 echo "   - Script: /opt/radius_dashboard/gerar_painel.py"
 echo "   - HTML: /var/www/html/radius/index.html"
-echo "   - Templates: /opt/radius_dashboard/templates/"
-echo "   - Logs: /var/log/radius_dashboard.log"
-echo "   - Nginx: /etc/nginx/sites-available/radius"
+echo "   - Dados: /var/www/html/radius/data.json"
+echo "   - Log: /var/log/radius_dashboard.log"
+echo "   - Cache: /opt/radius_dashboard/log_cache.pickle"
 echo ""
 
 echo "🔄 Atualização automática:"
@@ -370,6 +401,7 @@ echo "   - Forçar atualização: systemctl start radius-dashboard.service"
 echo "   - Ver logs: journalctl -u radius-dashboard.service -n 50 -f"
 echo "   - Ver timer: systemctl status radius-dashboard.timer"
 echo "   - Ver Nginx: systemctl status nginx"
+echo "   - Executar manual: /opt/radius_dashboard/venv/bin/python3 /opt/radius_dashboard/gerar_painel.py"
 echo ""
 
 echo -e "${GREEN}✅ Instalação concluída!${NC}"
